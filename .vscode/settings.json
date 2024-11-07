@@ -1,0 +1,9 @@
+{
+    "files.associations": {
+        "multiSolidBodyMotionFvMesh.C": "cpp",
+        "icoFoam.C": "cpp",
+        "gpuList.C": "cpp",
+        "gpuListIO.C": "cpp",
+        "gpuLists.C": "cpp"
+    }
+}

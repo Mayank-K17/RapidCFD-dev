@@ -30,9 +30,8 @@ Description
 \*---------------------------------------------------------------------------*/
 
 #include "fvCFD.H"
-
+#include <nvtx3/nvToolsExt.h>
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
 int main(int argc, char *argv[])
 {
     #include "setRootCase.H"
@@ -45,9 +44,10 @@ int main(int argc, char *argv[])
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
     Info<< "\nStarting time loop\n" << endl;
-
+    nvtxRangePush("Main loop");
     while (runTime.loop())
     {
+        nvtxRangePush("solve momemtum");
         Info<< "Time = " << runTime.timeName() << nl << endl;
 
         #include "readPISOControls.H"
@@ -61,11 +61,12 @@ int main(int argc, char *argv[])
         );
 
         solve(UEqn == -fvc::grad(p));
-
+        nvtxRangePop();
         // --- PISO loop
-
+        nvtxRangePush("Corrector loop correction");
         for (int corr=0; corr<nCorr; corr++)
         {
+            nvtxRangePush("prepare correction");
             volScalarField rAU(1.0/UEqn.A());
 
             volVectorField HbyA("HbyA", U);
@@ -76,38 +77,55 @@ int main(int argc, char *argv[])
                 (fvc::interpolate(HbyA) & mesh.Sf())
               + fvc::interpolate(rAU)*fvc::ddtCorr(U, phi)
             );
-
             adjustPhi(phiHbyA, U, p);
+            nvtxRangePop();
 
+            nvtxRangePush("Non-orthogonal pressure corrector loop");
             for (int nonOrth=0; nonOrth<=nNonOrthCorr; nonOrth++)
             {
+                nvtxRangePush("preprare");
                 fvScalarMatrix pEqn
                 (
                     fvm::laplacian(rAU, p) == fvc::div(phiHbyA)
                 );
-
                 pEqn.setReference(pRefCell, pRefValue);
-                pEqn.solve();
+                nvtxRangePop();
 
+                nvtxRangePush("solve");
+                pEqn.solve();
+                nvtxRangePop();
+
+                nvtxRangePush("final non-orthogonal iteration");
                 if (nonOrth == nNonOrthCorr)
                 {
                     phi = phiHbyA - pEqn.flux();
                 }
+                nvtxRangePop();
             }
 
+            nvtxRangePop();
+
+            nvtxRangePush("correctBoundaryConditions");
             #include "continuityErrs.H"
 
             U = HbyA - rAU*fvc::grad(p);
             U.correctBoundaryConditions();
+            nvtxRangePop();
         }
 
+        nvtxRangePop();
+
+        nvtxRangePush("write");
         runTime.write();
 
         Info<< "ExecutionTime = " << runTime.elapsedCpuTime() << " s"
             << "  ClockTime = " << runTime.elapsedClockTime() << " s"
             << nl << endl;
+
+        nvtxRangePop();
     }
 
+    nvtxRangePop();
     Info<< "End\n" << endl;
 
     return 0;
